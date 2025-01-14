@@ -18,7 +18,7 @@ export
 
 type
     CalendarPropertyType* = enum
-        propertyString, propertyObject
+        propertyString, propertyObject, propertyList
     CalendarPropertyTable* = OrderedTable[string, CalendarProperty] ## "Property Parameter" -> "Property Parameter Value" (described in https://datatracker.ietf.org/doc/html/rfc5545.html#section-3.2)
     CalendarProperty* = object
         case propertyType: CalendarPropertyType:
@@ -26,6 +26,8 @@ type
             text*: string
         of propertyObject:
             data*: CalendarPropertyTable
+        of propertyList:
+            list*: seq[CalendarProperty]
 
     CalendarItemIdentifier = enum ## https://datatracker.ietf.org/doc/html/rfc5545.html#section-8.3.1
         VCALENDAR
@@ -54,7 +56,7 @@ type
         starting*: DateTime
         case periodType: PeriodType:
         of periodDateToDate: ending*: DateTime
-        of periodDateAndDuration: duration: Duration
+        of periodDateAndDuration: duration*: Duration
 
 
 proc newCalendarEvent*(): CalendarItem = CalendarItem(identifier: VEVENT)
@@ -95,17 +97,43 @@ proc newCalendarPeriod*(starting: DateTime, duration: Duration): Period =
 # String/Dollar procs:
 # -----------------------------------------------------------------------------
 
+# Forward declarations:
+proc `$`*(table: CalendarPropertyTable): string
+proc `$`*(table: seq[CalendarPropertyTable]): seq[string]
+
+
+proc `*`(text: string): string =
+    ## Quotes text
+    result = text
+    if text.startsWith('"') and text.endsWith('"'): return
+
+    var needsQuoting: bool
+    for c in [':']:
+        if c in text: needsQuoting = true
+
+    if not needsQuoting: return
+    result = result.replace("\"", "\\\"")
+
 proc propertyTextString(property: CalendarProperty): string =
-    result = ":"
-    # TODO: implementation
+    result = ":" & *property.text
 proc propertyTextObject(property: CalendarProperty): string =
     result = ";"
+    # TODO: implementation
+proc propertyTextList(property: CalendarProperty): string =
+    result = ":"
     # TODO: implementation
 proc propertyText(property: CalendarProperty): string =
     ## Processes text of properties, quotes them if needed
     result = case property.propertyType:
         of propertyString: property.propertyTextString()
         of propertyObject: property.propertyTextObject()
+        of propertyList: property.propertyTextList()
+
+
+proc `$`*(table: CalendarPropertyTable): string =
+    ##
+proc `$`*(table: seq[CalendarPropertyTable]): seq[string] =
+    ##
 
 proc `$`*(item: CalendarItem): string =
     result = "BEGIN:" & $item.identifier
@@ -183,14 +211,18 @@ proc convertPeriod(period: Period): string =
 proc `[]=`*(item: var CalendarItem, key: KeyProperty, value: CalendarProperty) =
     item.properties[$key] = value
 
+
 proc `[]=`*(item: var CalendarItem, key: KeyProperty, value: string) =
     item[key] = newCalendarPropertyString(value)
+
 proc `[]=`*(item: var CalendarItem, key: KeyProperty, value: bool) =
     item[key] = newCalendarPropertyString(value.convertBool())
+
 proc `[]=`*(item: var CalendarItem, key: KeyProperty, value: SomeInteger) =
     item[key] = newCalendarPropertyString(value.convertInt())
 proc `[]=`*(item: var CalendarItem, key: KeyProperty, value: SomeFloat) =
     item[key] = newCalendarPropertyString(value.convertFloat())
+
 proc `[]=`*(item: var CalendarItem, key: KeyProperty, value: DateTime) =
     item[key] = newCalendarPropertyString(value.convertDate())
 proc `[]=`*(item: var CalendarItem, key: KeyProperty, value: Duration) =
